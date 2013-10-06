@@ -93,7 +93,7 @@ void GAssemble(int size,double**M,double**C,double**K,double*G,Force*forces)
         G[i] = forces[i].curval;
         for(int j=0;j<size;j++)
         {
-            G[i] += -(-(2*M[i][j]/DTauSqd)+K[i][j])*CurDisplacement[j] - (-(C[i][j]/TwiceDTau) + (M[i][j]/DTauSqd))*LastDisplacement[j];
+            G[i] += ((2*M[i][j]/DTauSqd)-K[i][j])*CurDisplacement[j] + ((C[i][j]/TwiceDTau) - (M[i][j]/DTauSqd))*LastDisplacement[j];
         }
     }
 }
@@ -113,11 +113,13 @@ int main()
 {
     //Initialization.
     int NCNT, DoF, numFixed = 0;
+    int scratch;
     int *nodesfixed;
     Node*nodes = NULL;
     Force*exforce = NULL;
+    bool prob3 = false, prob4 = false, freaksweep = false;
     int size;
-    ofstream node3 ("node3.txt");//used solely for problem 4. Could easily be generalized
+    ofstream output ("Output.txt");
 
     //set up timestep values
     cout << "This Program solves a system of 2nd order (no bending allowed) constant term ODEs using FEM" << endl;
@@ -125,16 +127,14 @@ int main()
     cin >> DTau;
     cout << "Enter last time to solve for." << endl;
     cin >> TFinal;
-    int cycles = ceil(TFinal/DTau)+1;
-    DTauSqd = DTau*DTau; //Precalculate repeatedly used values
-    TwiceDTau = DTau*2;
 
     cout<<"Enter 4 to automatically set up the system in problem 4"<<endl;
     cout<<"Enter 3 to automatically set up the system in problem 3"<<endl;
-    cin >> NCNT; //bad place to store this but only temporary
+    cin >> scratch;
 
-    if(NCNT == 4)
+    if(scratch == 4)
     {
+        prob4 = true;
         NCNT = 7;
         DoF = 2;
         size = 14;
@@ -144,21 +144,28 @@ int main()
             nodes[i].initProb4(i);
         }
         exforce = new Force[14];
+        cout << "Enter 1 for sin force, 2 for ramp," << endl << "and 3 to perform a frequency sweep";
+        cin >> scratch;
         for(int i=0;i<14;i++)
         {
-            if(i == 12)
-            {
-                exforce[i].type = 1;
-                exforce[i].FS.amplitude = 10;
-                cout << "Input w or -1 for a frequency sweep" << endl;
-                cin >> exforce[i].FS.frequency;
-                exforce[i].curval = 0;
-            }
-            else
-            {
-                exforce[i].type = 0;
-                exforce[i].curval = 0;
-            }
+            exforce[i].type = 0;
+            exforce[i].curval = 0;
+        }
+        if(scratch == 1)
+        {
+            exforce[12].type = 1;
+            exforce[12].FS.amplitude = 10;
+            cout << "Input Frequency" << endl;
+            cin >> exforce[12].FS.frequency;
+        }
+        else if(scratch == 2)
+        {
+            exforce[12].type = 2;
+            exforce[12].multiplier = 20;
+        }
+        else if(scratch == 3)
+        {
+            freaksweep = true;
         }
         numFixed = 2;
         nodesfixed = new int[4];
@@ -166,14 +173,39 @@ int main()
         nodesfixed[1] = 1;
         nodesfixed[2] = 8;
         nodesfixed[3] = 9;
+        scratch = 4;
     }
-    //else if(NCNT == 3)
+    /*
+    else if(scratch == 3)
+    {
+        prob3 = true;
+        NCNT = 6;
+        DoF = 1;
+        size = 6;
+        nodes = new Node[NCNT];
+        for (int i=0;i<NCNT;i++)
+        {
+            nodes[i].initProb3(i);
+        }
+        exforce = new Force[size];
+        for(int i=0;i<size;i++)
+        {
+            exforce[i].type = 0;
+            exforce[i].curval = nodes[i].getselffactor(2)*(-9.81);
+        }
+        numFixed = 3;
+        nodesfixed = new int[numFixed];
+        nodesfixed[0] = 0;
+        nodesfixed[1] = 3;
+        nodesfixed[2] = 5;
+    }
+    */
     else
     {
         cout << "enter # of nodes:          ";
         cin >> NCNT;
-        cout << "Choose 1 or 2 degrees of freedom: ";
-        cin >> DoF;
+        //cout << "Choose 1 or 2 degrees of freedom: ";
+        /*cin >>*/ DoF = 2;
         nodes = new Node[NCNT];
         for (int i=0;i<NCNT;i++)
         {
@@ -241,6 +273,9 @@ int main()
     double *subnextdis = new double[size-(DoF*numFixed)];
     double *velocity = new double[size];
     double *acceleration = new double[size];
+    double *amplitude = new double[size];
+    double *mean = new double[size];
+    double *peak = new double[size];
 
     for(int i=0;i<size;i++)
     {
@@ -249,7 +284,10 @@ int main()
         NextDisplacement[i] = 0;
         velocity[i] = 0;
         acceleration[i] = 0;
-        exforce[i].curval = 0;
+        amplitude[i] = 0;
+        mean[i] = 0;
+        peak[i] = 0;
+        //exforce[i].curval = 0;
     }
 
     //first the selfreferential elements
@@ -260,97 +298,260 @@ int main()
 
     int fixindx;
     int lj;
-    for (int i = 0;i<cycles;i++)
+
+    //set up time
+    int cycles = ceil(TFinal/DTau)+1;
+    int plotinterval = cycles/5000; //plotting millions of points is insane
+    if(plotinterval<1)
     {
-        //now the coupled elements
-        coupledAssemble(nodes,Kc,0,NCNT,DoF);
-        coupledAssemble(nodes,Cc,1,NCNT,DoF);
-        coupledAssemble(nodes,Mc,2,NCNT,DoF);
+        plotinterval = 1;
+    }
+    DTauSqd = DTau*DTau; //Precalculate repeatedly used values
+    TwiceDTau = DTau*2;
+    double T1;
 
-        addm(Kc,Ks,Kc,size,size);
-        addm(Cc,Cs,Cc,size,size);
-        addm(Mc,Ms,Mc,size,size);
-
-        fixindx = 0;
-        for(int j=0;j<size;j++)
+    //calculate the maximum value that may be used to get a frequency amplitude
+    if(prob4)
+    {
+        if(exforce[12].type == 1)
         {
-            if(exforce[j].type != 0) //if the force is external varying
+            T1 = TFinal - (2*pi)/exforce[12].FS.frequency;
+        }
+    }
+
+    if(!freaksweep)
+    {
+        for (int i = 0;i<cycles;i++)
+        {
+            //now the coupled elements
+            coupledAssemble(nodes,Kc,0,NCNT,DoF);
+            coupledAssemble(nodes,Cc,1,NCNT,DoF);
+            coupledAssemble(nodes,Mc,2,NCNT,DoF);
+
+            addm(Kc,Ks,Kc,size,size);
+            addm(Cc,Cs,Cc,size,size);
+            addm(Mc,Ms,Mc,size,size);
+
+            fixindx = 0;
+            for(int j=0;j<size;j++)
             {
-                if(exforce[j].type == 1) //sinusoid
+                if(exforce[j].type != 0) //if the force is external varying
                 {
-                    exforce[j].curval = (exforce[j].FS.amplitude)*sin((exforce[j].FS.frequency)*((i)*DTau));//+(mulonerow(Mc,acceleration,j,size)+(mulonerow(Cc,velocity,j,size))+(mulonerow(Kc,CurDisplacement,j,size)));
-                }
-                else //ramp
-                {
-                    exforce[j].curval = (exforce[j].multiplier)*((i)*DTau);
+                    if(exforce[j].type == 1) //sinusoid
+                    {
+                        exforce[j].curval = (exforce[j].FS.amplitude)*sin((exforce[j].FS.frequency)*((i)*DTau));
+                    }
+                    else //ramp
+                    {
+                        exforce[j].curval = (exforce[j].multiplier)*((i)*DTau);
+                    }
                 }
             }
-        }
-        //ForcePrint(exforce,size);
-        GAssemble(size,Mc,Cc,Kc,G,exforce);
-        AAssemble(size,Mc,Cc,A);
+            GAssemble(size,Mc,Cc,Kc,G,exforce);
+            AAssemble(size,Mc,Cc,A);
+            //MPrint(A,size,size);
+            createsubmatrix(A, submatrix,size,nodesfixed);
+            //MPrint(submatrix,size-(DoF*numFixed),size);
+            createsubG(G,subG,size,nodesfixed);
 
-        //PrintV(G,size);
-        //MPrint(A,size,size);
-        //Before solving, remove fixed nodes
-        createsubmatrix(A, submatrix,size,nodesfixed);
-        createsubG(G,subG,size,nodesfixed);
+            lud(submatrix,subG,(size-(DoF*numFixed)),subnextdis);
 
-        //PrintV(subG,(size-(numFixed*DoF)));
+            //put next displacements into main vector
+            fixindx = 0;
+            lj = 0;
 
-        //MPrint(submatrix,(size-(DoF*numFixed)),(size-(DoF*numFixed)));
-
-        lud(submatrix,subG,(size-(DoF*numFixed)),subnextdis);
-
-        //put next displacements into main vector
-        fixindx = 0;
-        lj = 0;
-
-        //PrintV(subnextdis,(size-(DoF*numFixed)));
-        for(int j=0;j<(size-(DoF*numFixed));j++)
-        {
-            while(nodesfixed[fixindx] == lj)
+            for(int j=0;j<(size-(DoF*numFixed));j++)
             {
+                while(nodesfixed[fixindx] == lj)
+                {
+                    lj++;
+                    fixindx++;
+                    if(lj >= size)
+                    {
+                        continue;
+                    }
+                }
+                NextDisplacement[lj] = subnextdis[j];
                 lj++;
-                fixindx++;
-                if(lj >= size)
+            }
+            //update velocity and acceleration
+            for(int j=0;j<size;j++)
+            {
+                velocity[j] = (NextDisplacement[j]-LastDisplacement[j])/TwiceDTau;
+                acceleration[j] = ((NextDisplacement[j]-2*CurDisplacement[j]+LastDisplacement[j])/DTauSqd);
+            }
+            //check for peak and sum for mean if needed
+            if(prob4)
+            {
+                if((exforce[12].type == 1) && (i*DTau >= T1))
                 {
-                    continue;
+                    for(int k = 0;k<size;k++)
+                    {
+                        if(peak[k] < CurDisplacement[k])
+                        {
+                            peak[k] = CurDisplacement[k];
+                        }
+                    }
+                    freqsweep(CurDisplacement,LastDisplacement,mean,DTau,exforce[12].FS.frequency,size);
                 }
             }
-            NextDisplacement[lj] = subnextdis[j];
-            lj++;
+            if((i%plotinterval) == 0)
+            {
+                if(prob4)
+                {
+                    if(exforce[12].type == 1)
+                    {
+                        if(i)
+                        output << CurDisplacement[4] << " , " << CurDisplacement[5] << " , "
+                            << velocity[4] << " , " << velocity[5] << " , "
+                            << acceleration[4] << " , " << acceleration[5]
+                            << " , " << (i*DTau) << endl;
+                    }
+                    else
+                    {
+                        for(int p = 0;p<NCNT;p++)
+                        {
+                            for(int d = 0; d<DoF;d++)
+                            {
+                                output << CurDisplacement[p*DoF+d] << " , " ;
+                            }
+                            for(int d = 0; d<DoF;d++)
+                            {
+                                output << velocity[p*DoF+d] << " , ";
+                            }
+                            for(int d = 0; d<DoF;d++)
+                            {
+                                output << acceleration[p*DoF+d] << " , ";
+                            }
+                            output <<  (i*DTau) << endl;
+                        }
+                    }
+                }
+                else if (prob3)
+                {
+                    output << CurDisplacement[1] << " , "<< CurDisplacement[2]
+                    << " , " << CurDisplacement[4] << " , " << (i*DTau) << endl;
+                }
+            }
+            //Shift Indices
+            for(int j=0;j<NCNT;j++)
+            {
+                for(int d=0;d<DoF;d++)
+                {
+                    updatevector[d] = NextDisplacement[(DoF*j+d)];
+                    LastDisplacement[(j*DoF + d)] = CurDisplacement[(j*DoF + d)];
+                    CurDisplacement[(j*DoF + d)] = NextDisplacement[(j*DoF + d)];
+                }
+                nodes[j].UpdateDelta(updatevector);
+            }
         }
-        //PrintV(NextDisplacement,size);
-
-        //update velocity and acceleration
-        for(int j=0;j<size;j++)
-        {
-            velocity[j] = (NextDisplacement[j]-LastDisplacement[j])/TwiceDTau;
-            acceleration[j] = ((NextDisplacement[j]-2*CurDisplacement[j]+LastDisplacement[j])/DTauSqd);
-        }
-        if(i%100 == 0)
-        {
-            node3 << nodes[2].GetPosition(0) << " , " << nodes[2].GetPosition(1) << " , "
-                << velocity[4] << " , " << velocity[5] << " , "
-                << acceleration[4] << " , " << acceleration[5]
-                << " , " << (i*DTau) << endl;
-        }
-
-        //Shift Indices
-        for(int j=0;j<NCNT;j++)
+        for(int i=0; i<NCNT;i++)
         {
             for(int d=0;d<DoF;d++)
             {
-                updatevector[d] = NextDisplacement[(DoF*j+d)];
-                LastDisplacement[(j*DoF + d)] = CurDisplacement[(j*DoF + d)];
-                CurDisplacement[(j*DoF + d)] = NextDisplacement[(j*DoF + d)];
+                amplitude[i*DoF+d] = abs(peak[i*DoF+d]-mean[i*DoF+d]);
+                cout << "Amplitude for Node " << i << ", dim " << d << " is " << amplitude[i*DoF+d] << endl
+                    << "Mean for Node " << i << ", dim " << d << " is " << mean[i*DoF+d] << endl
+                    << "Peak for Node " << i << ", dim " << d << " is " << peak[i*DoF+d] << endl;
             }
-            nodes[j].UpdateDelta(updatevector);
         }
-
-
     }
+    else
+    {
+        T1 = 25;
+        for(exforce[12].FS.frequency = 1;exforce[12].FS.frequency < 150.1;exforce[12].FS.frequency += 0.50)
+        {
+            TFinal = 25 + (2*pi)/exforce[12].FS.frequency;
+            cycles = ceil(TFinal/DTau)+1;
+            DTauSqd = DTau*DTau; //Precalculate repeatedly used values
+            TwiceDTau = DTau*2;
+            for (int i = 0;i<cycles;i++)
+            {
+                //now the coupled elements
+                coupledAssemble(nodes,Kc,0,NCNT,DoF);
+                coupledAssemble(nodes,Cc,1,NCNT,DoF);
+                coupledAssemble(nodes,Mc,2,NCNT,DoF);
+
+                addm(Kc,Ks,Kc,size,size);
+                addm(Cc,Cs,Cc,size,size);
+                addm(Mc,Ms,Mc,size,size);
+
+                fixindx = 0;
+
+                //can hard code this because this code is run only for the Q4 frequency sweep
+                exforce[12].curval = (exforce[12].FS.amplitude)*sin((exforce[12].FS.frequency)*((i)*DTau));
+
+                GAssemble(size,Mc,Cc,Kc,G,exforce);
+                AAssemble(size,Mc,Cc,A);
+                //MPrint(A,size,size);
+                createsubmatrix(A, submatrix,size,nodesfixed);
+                //MPrint(submatrix,size-(DoF*numFixed),size);
+                createsubG(G,subG,size,nodesfixed);
+
+                lud(submatrix,subG,(size-(DoF*numFixed)),subnextdis);
+
+                //put next displacements into main vector
+                fixindx = 0;
+                lj = 0;
+
+                for(int j=0;j<(size-(DoF*numFixed));j++)
+                {
+                    while(nodesfixed[fixindx] == lj)
+                    {
+                        lj++;
+                        fixindx++;
+                        if(lj >= size)
+                        {
+                            continue;
+                        }
+                    }
+                    NextDisplacement[lj] = subnextdis[j];
+                    lj++;
+                }
+                //update velocity and acceleration
+                for(int j=0;j<size;j++)
+                {
+                    velocity[j] = (NextDisplacement[j]-LastDisplacement[j])/TwiceDTau;
+                    acceleration[j] = ((NextDisplacement[j]-2*CurDisplacement[j]+LastDisplacement[j])/DTauSqd);
+                }
+                //check for peak and sum for mean if needed
+                if(i*DTau >= T1)
+                {
+                    for(int k = 0;k<size;k++)
+                    {
+                        if(peak[k] < CurDisplacement[k])
+                        {
+                            peak[k] = CurDisplacement[k];
+                        }
+                    }
+                    freqsweep(CurDisplacement,LastDisplacement,mean,DTau,exforce[12].FS.frequency,size);
+                }
+                //Shift Indices
+                for(int j=0;j<NCNT;j++)
+                {
+                    for(int d=0;d<DoF;d++)
+                    {
+                        updatevector[d] = NextDisplacement[(DoF*j+d)];
+                        LastDisplacement[(j*DoF + d)] = CurDisplacement[(j*DoF + d)];
+                        CurDisplacement[(j*DoF + d)] = NextDisplacement[(j*DoF + d)];
+                    }
+                    nodes[j].UpdateDelta(updatevector);
+                }
+            }
+            for(int i=0; i<NCNT;i++)
+            {
+                for(int d=0;d<DoF;d++)
+                {
+                    amplitude[i*DoF+d] = abs(peak[i*DoF+d]-mean[i*DoF+d]);
+                    output<<  amplitude[i*DoF+d] << " , " << mean[i*DoF+d] << " , " << peak[i*DoF+d] << " , ";
+                    mean[i*DoF+d] = 0;
+                    peak[i*DoF+d] = 0;
+                }
+            }
+            output << exforce[12].FS.frequency << endl << endl;
+        }
+    }
+
     cout << "no seg faults" << endl;
     cin.get();
     return 0;
