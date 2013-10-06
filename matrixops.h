@@ -193,7 +193,7 @@ void subm(double**a,double**b,double**result,int rows,int col)
      {
          for (int j=0;j<col;j++)
          {
-             result[i][j] = a[i][j] -b[i][j];
+                result[i][j] = a[i][j] - b[i][j];
          }
      }
 }
@@ -368,10 +368,6 @@ void lud(double**matrix, double*b, int size, double*x)
      for (int i=0; i<size; i++)
      {
          upper[i][i] = 1;
-     }
-
-     for (int i=0; i<size; i++)
-     {
          lower[i][0] = matrix[i][0];
      }
 
@@ -379,34 +375,34 @@ void lud(double**matrix, double*b, int size, double*x)
      {
          if ((perm & 1) == 0)
          {
-            for (int i=((perm/2)+1); i<size; i++)
-            {
-               sum = matrix[perm/2][i];
-               for (int j=0; j<(perm/2); j++)
-               {
-                   sum -= lower[perm/2][j]*upper[j][i];
-               }
-               sum = sum/lower[perm/2][perm/2];
-               upper[perm/2][i] = sum;
-            }
+                   for (int i=((perm/2)+1); i<size; i++)
+                   {
+                       sum = matrix[perm/2][i];
+                       for (int j=0; j<(perm/2); j++)
+                       {
+                           sum -= lower[perm/2][j]*upper[j][i];
+                       }
+                       sum = sum/lower[perm/2][perm/2];
+                       upper[perm/2][i] = sum;
+                   }
          }
          else
          {
-            for (int i=((perm+1)/2); i<size; i++)
-            {
-               sum = matrix[i][(perm+1)/2];
-               for (int j=0; j<((perm+1)/2); j++)
-               {
-                   sum -= lower[i][j]*upper[j][(perm+1)/2];
-               }
-               lower[i][(perm+1)/2] = sum;
-            }
+                   for (int i=((perm+1)/2); i<size; i++)
+                   {
+                       sum = matrix[i][(perm+1)/2];
+                       for (int j=0; j<((perm+1)/2); j++)
+                       {
+                           sum -= lower[i][j]*upper[j][(perm+1)/2];
+                       }
+                       lower[i][(perm+1)/2] = sum;
+                   }
          }
      }
      for(int i=0; i<size; i++)
      {
          sum = b[i];
-         for(int j=0; j<i-1; j++)
+         for(int j=0; j<i; j++)
          {
                  sum -= lower[i][j]*y[j];
          }
@@ -416,7 +412,7 @@ void lud(double**matrix, double*b, int size, double*x)
      for(int i=(size-1); i>-1; i--)
      {
          sum = y[i];
-         for(int j=(size-1); i>i; i--)
+         for(int j=(size-1); j>i; j--)
          {
                  sum -= upper[i][j]*x[j];
          }

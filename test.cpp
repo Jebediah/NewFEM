@@ -88,37 +88,24 @@ void coupledAssemble(Node*list,double**c,int select, int NCNT, int DoF)
 // matrices named for M, C, and K for visualization purposes
 void GAssemble(int size,double**M,double**C,double**K,double*G,Force*forces)
 {
-    double **temp = CreateMatrix(size), **temp2 = CreateMatrix(size);//may make this global so that memory is not constantly being allocated and deallocated
-    //MPrint(temp,size,size);
-    mulsca(M,temp,size,size,(2*DTauSqd));
-    //MPrint(temp,size,size);
-    subm(temp,K,temp,size,size);
-    //MPrint(temp,size,size);
-    mulsquvec(temp,CurDisplacement,G,size);
-    //MPrint(temp,size,size);
-    mulsca(M,temp,size,size,-(DTauSqd));
-    //MPrint(temp,size,size);
-    mulsca(C,temp2,size,size,(TwiceDTau));
-    //MPrint(temp2,size,size);
-    addm(temp,temp2,temp,size,size);
-    //MPrint(temp,size,size);
-    mulsquvec(temp,LastDisplacement,temp2[0],size);
-    //MPrint(temp2,size,size);
-    for(int i = 0;i<size;i++)
+    for(int i=0;i<size;i++)
     {
-        G[i] += forces[i].curval + temp2[0][i];
+        G[i] = forces[i].curval;
+        for(int j=0;j<size;j++)
+        {
+            G[i] += -(-(2*M[i][j]/DTauSqd)+K[i][j])*CurDisplacement[j] - (-(C[i][j]/TwiceDTau) + (M[i][j]/DTauSqd))*LastDisplacement[j];
+        }
     }
-    DeleteMatrix(size,temp);
-    DeleteMatrix(size,temp2);
-    temp = temp2 = NULL;
 }
 void AAssemble(int size,double**M,double**C,double**A)
 {
-    double **temp = CreateMatrix(size);
-    mulsca(M,temp,size,size,DTauSqd);
-    mulsca(C,A,size,size,TwiceDTau);
-    addm(A,temp,A,size,size);
-    DeleteMatrix(size,temp);
+    for(int i=0;i<size;i++)
+    {
+        for(int j=0;j<size;j++)
+        {
+            A[i][j] = (M[i][j]/DTauSqd+C[i][j]/TwiceDTau);
+        }
+    }
 }
 
 
@@ -139,13 +126,14 @@ int main()
     cout << "Enter last time to solve for." << endl;
     cin >> TFinal;
     int cycles = ceil(TFinal/DTau)+1;
-    DTauSqd = 1/(DTau*DTau); //Precalculate repeatedly used values
-    TwiceDTau = 1/(DTau*2);
+    DTauSqd = DTau*DTau; //Precalculate repeatedly used values
+    TwiceDTau = DTau*2;
 
-    cout<<"Enter 1 to automatically set up the system in problem 4"<<endl;
+    cout<<"Enter 4 to automatically set up the system in problem 4"<<endl;
+    cout<<"Enter 3 to automatically set up the system in problem 3"<<endl;
     cin >> NCNT; //bad place to store this but only temporary
 
-    if(NCNT == 1)
+    if(NCNT == 4)
     {
         NCNT = 7;
         DoF = 2;
@@ -162,7 +150,8 @@ int main()
             {
                 exforce[i].type = 1;
                 exforce[i].FS.amplitude = 10;
-                exforce[i].FS.frequency = 30;
+                cout << "Input w or -1 for a frequency sweep" << endl;
+                cin >> exforce[i].FS.frequency;
                 exforce[i].curval = 0;
             }
             else
@@ -178,7 +167,7 @@ int main()
         nodesfixed[2] = 8;
         nodesfixed[3] = 9;
     }
-
+    //else if(NCNT == 3)
     else
     {
         cout << "enter # of nodes:          ";
@@ -282,12 +271,6 @@ int main()
         addm(Cc,Cs,Cc,size,size);
         addm(Mc,Ms,Mc,size,size);
 
-        //MPrint(Kc,size,size);
-        //MPrint(Cc,size,size);
-        //MPrint(Mc,size,size);
-        //createsubmatrix(Cc, submatrix,size,nodesfixed);
-        //MPrint(submatrix,(size-(DoF*numFixed)),(size-(DoF*numFixed)));
-        //Update Force
         fixindx = 0;
         for(int j=0;j<size;j++)
         {
@@ -299,34 +282,22 @@ int main()
                 }
                 else //ramp
                 {
-                    exforce[j].curval = (exforce[j].multiplier)*((i)*DTau);//-(mulonerow(Mc,acceleration,j,size)-(mulonerow(Cc,velocity,j,size))-(mulonerow(Kc,CurDisplacement,j,size)));
+                    exforce[j].curval = (exforce[j].multiplier)*((i)*DTau);
                 }
             }
-            //else if (j == nodesfixed[fixindx])
-            //
-                //PrintV(CurDisplacement,size);
-                //PrintV(velocity, size);
-                //PrintV(acceleration, size);
-                //MPrint(Kc,size,size);
-                //MPrint(Cc,size,size);
-                //MPrint(Mc,size,size);
-                //exforce[j].curval = (mulonerow(Mc,acceleration,j,size)+(mulonerow(Cc,velocity,j,size))+(mulonerow(Kc,CurDisplacement,j,size)));
-                //fixindx++;
-            //}
         }
-        ForcePrint(exforce,size);
-
+        //ForcePrint(exforce,size);
         GAssemble(size,Mc,Cc,Kc,G,exforce);
         AAssemble(size,Mc,Cc,A);
 
         //PrintV(G,size);
+        //MPrint(A,size,size);
         //Before solving, remove fixed nodes
         createsubmatrix(A, submatrix,size,nodesfixed);
         createsubG(G,subG,size,nodesfixed);
 
-        PrintV(subG,(size-(numFixed*DoF)));
+        //PrintV(subG,(size-(numFixed*DoF)));
 
-        //MPrint(A,size,size);
         //MPrint(submatrix,(size-(DoF*numFixed)),(size-(DoF*numFixed)));
 
         lud(submatrix,subG,(size-(DoF*numFixed)),subnextdis);
@@ -350,13 +321,13 @@ int main()
             NextDisplacement[lj] = subnextdis[j];
             lj++;
         }
-        PrintV(NextDisplacement,size);
+        //PrintV(NextDisplacement,size);
 
         //update velocity and acceleration
         for(int j=0;j<size;j++)
         {
-            velocity[j] = (NextDisplacement[j]-LastDisplacement[j])*TwiceDTau;
-            acceleration[j] = ((NextDisplacement[j]-2*CurDisplacement[j]+LastDisplacement[j])*DTauSqd);
+            velocity[j] = (NextDisplacement[j]-LastDisplacement[j])/TwiceDTau;
+            acceleration[j] = ((NextDisplacement[j]-2*CurDisplacement[j]+LastDisplacement[j])/DTauSqd);
         }
         if(i%100 == 0)
         {
