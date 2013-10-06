@@ -493,3 +493,11 @@ double mulonerow(double**matrix,double*vector,int row, int length)
     }
     return sum;
 }
+
+void freqsweep(double*uc,double*up,double*result,double deltat,double freq,int size)
+{
+    for(int i=0; i<size; i++)
+    {
+        result[i] = ((deltat*freq)*(uc[i] + up[i]))/(4*pi);
+    }
+}
