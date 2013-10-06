@@ -54,7 +54,6 @@ int main()
     M[3][3] = n3.getselffactor(2);
     M[4][4] = n4.getselffactor(2);
     M[5][5] = n5.getselffactor(2);
-    C[0][0] += n0.getconnfactor(0,1);                                           //Set dampener matrix
     C[1][1] += n0.getconnfactor(0,1);
     C[1][0] -= n0.getconnfactor(0,1);
     C[0][1] -= n0.getconnfactor(0,1);
@@ -114,18 +113,15 @@ int main()
     MPrint(C,6,6);
     cout << endl << "Spring matrix:" << endl;
     MPrint(K,6,6);
-    cout << endl;
+    cout << endl;/*
     for (int i=0; i<6; i++)
     {
         a[i] = 0;
-    }/*
-    a[1]=-9.80665;
-    a[2]=-9.80665;
-    a[4]=-9.80665;*/
+    }
     for (int i=0; i<6; i++)
     {
         v[i] = 0;
-    }
+    }*/
     for (int i=0; i<6; i++)
     {
         uc[i] = 0;
@@ -148,26 +144,11 @@ int main()
     }
     Data << endl;
     
-    for (double perm=0.0001; perm<=7.5; perm+=0.0001)                        //Permutations begin (0.0001s to 7.5s)
+    for (double perm=0.0001; perm<=7.5; perm+=0.0001)                           //Permutations begin (0.0001s to 7.5s)
     {
         for (int i=0; i<6; i++)
         {
             F[i] = 0;
-        }
-        mulsquvec(M,a,sumvec,6);
-        for (int i=0; i<6; i++)
-        {
-            F[i] -= sumvec[i];
-        }
-        mulsquvec(C,v,sumvec,6);
-        for (int i=0l; i<6; i++)
-        {
-            F[i] -= sumvec[i];
-        }
-        mulsquvec(K,uc,sumvec,6);
-        for (int i=0; i<6; i++)
-        {
-            F[i] -= sumvec[i];
         }
         for (int i=0; i<6; i++)
         {
@@ -180,13 +161,13 @@ int main()
         {
             F[i] -= sumvec[i];
         }
-        subm2(M,C,summat,6,6,1/deltat2,(1/2)*deltat);
+        subm2(M,C,summat,6,6,1/deltat2,(1/(2*deltat)));
         mulsquvec(summat,up,sumvec,6);
         for (int i=0; i<6; i++)
         {
             F[i] -= sumvec[i];
         }
-        addm2(M,C,summat,6,6,1/deltat2,(1/2)*deltat);
+        addm2(M,C,summat,6,6,1/deltat2,(1/(2*deltat)));
         
         sumvec2[0] = F[1];
         sumvec2[1] = F[2];
@@ -206,7 +187,7 @@ int main()
         un[1] = sumvec3[0];
         un[2] = sumvec3[1];
         un[4] = sumvec3[2];
-        
+        /*
         for (int i=0; i<6; i++)
         {
             v[i] = (un[i] - up[i])/(2*deltat);
@@ -214,7 +195,7 @@ int main()
         for (int i=0; i<6; i++)
         {
             a[i] = (un[i] - 2*uc[i] + up[i])/(deltat2);
-        }
+        }*/
         for (int i=0; i<6; i++)
         {
             up[i] = uc[i];
