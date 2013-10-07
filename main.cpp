@@ -113,15 +113,7 @@ int main()
     MPrint(C,6,6);
     cout << endl << "Spring matrix:" << endl;
     MPrint(K,6,6);
-    cout << endl;/*
-    for (int i=0; i<6; i++)
-    {
-        a[i] = 0;
-    }
-    for (int i=0; i<6; i++)
-    {
-        v[i] = 0;
-    }*/
+    cout << endl;
     for (int i=0; i<6; i++)
     {
         uc[i] = 0;
@@ -187,15 +179,6 @@ int main()
         un[1] = sumvec3[0];
         un[2] = sumvec3[1];
         un[4] = sumvec3[2];
-        /*
-        for (int i=0; i<6; i++)
-        {
-            v[i] = (un[i] - up[i])/(2*deltat);
-        }
-        for (int i=0; i<6; i++)
-        {
-            a[i] = (un[i] - 2*uc[i] + up[i])/(deltat2);
-        }*/
         for (int i=0; i<6; i++)
         {
             up[i] = uc[i];
