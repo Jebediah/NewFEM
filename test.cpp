@@ -129,7 +129,7 @@ int main()
     cin >> TFinal;
 
     cout<<"Enter 4 to automatically set up the system in problem 4"<<endl;
-    cout<<"Enter 3 to automatically set up the system in problem 3"<<endl;
+    //cout<<"Enter 3 to automatically set up the system in problem 3"<<endl;
     cin >> scratch;
 
     if(scratch == 4)
@@ -144,7 +144,7 @@ int main()
             nodes[i].initProb4(i);
         }
         exforce = new Force[14];
-        cout << "Enter 1 for sin force, 2 for ramp," << endl << "and 3 to perform a frequency sweep";
+        cout << "Enter 1 for sin force, 2 for ramp," << endl << "and 3 to perform a frequency sweep" << endl;
         cin >> scratch;
         for(int i=0;i<14;i++)
         {
@@ -166,6 +166,8 @@ int main()
         else if(scratch == 3)
         {
             freaksweep = true;
+            exforce[12].type = 1;
+            exforce[12].FS.amplitude = 10;
         }
         numFixed = 2;
         nodesfixed = new int[4];
@@ -286,7 +288,7 @@ int main()
         acceleration[i] = 0;
         amplitude[i] = 0;
         mean[i] = 0;
-        peak[i] = 0;
+        peak[i] = -1e20;
         //exforce[i].curval = 0;
     }
 
@@ -452,13 +454,12 @@ int main()
                 amplitude[i*DoF+d] = abs(peak[i*DoF+d]-mean[i*DoF+d]);
                 cout << "Amplitude for Node " << i << ", dim " << d << " is " << amplitude[i*DoF+d] << endl
                     << "Mean for Node " << i << ", dim " << d << " is " << mean[i*DoF+d] << endl
-                    << "Peak for Node " << i << ", dim " << d << " is " << peak[i*DoF+d] << endl;
+                    << "Peak for Node " << i << ", dim " << d << " is " << peak[i*DoF+d] << endl << endl;
             }
         }
     }
     else
     {
-        T1 = 25;
         for(exforce[12].FS.frequency = 1;exforce[12].FS.frequency < 150.1;exforce[12].FS.frequency += 0.50)
         {
             TFinal = 25 + (2*pi)/exforce[12].FS.frequency;
@@ -477,10 +478,20 @@ int main()
                 addm(Mc,Ms,Mc,size,size);
 
                 fixindx = 0;
-
-                //can hard code this because this code is run only for the Q4 frequency sweep
-                exforce[12].curval = (exforce[12].FS.amplitude)*sin((exforce[12].FS.frequency)*((i)*DTau));
-
+                for(int j=0;j<size;j++)
+                {
+                    if(exforce[j].type != 0) //if the force is external varying
+                    {
+                        if(exforce[j].type == 1) //sinusoid
+                        {
+                            exforce[j].curval = (exforce[j].FS.amplitude)*sin((exforce[j].FS.frequency)*((i)*DTau));
+                        }
+                        else //ramp
+                        {
+                            exforce[j].curval = (exforce[j].multiplier)*((i)*DTau);
+                        }
+                    }
+                }
                 GAssemble(size,Mc,Cc,Kc,G,exforce);
                 AAssemble(size,Mc,Cc,A);
                 //MPrint(A,size,size);
@@ -515,7 +526,59 @@ int main()
                     acceleration[j] = ((NextDisplacement[j]-2*CurDisplacement[j]+LastDisplacement[j])/DTauSqd);
                 }
                 //check for peak and sum for mean if needed
-                if(i*DTau >= T1)
+                /*if(prob4)
+                {
+                    if((exforce[12].type == 1) && (i*DTau >= T1))
+                    {
+                        for(int k = 0;k<size;k++)
+                        {
+                            if(peak[k] < CurDisplacement[k])
+                            {
+                                peak[k] = CurDisplacement[k];
+                            }
+                        }
+                        freqsweep(CurDisplacement,LastDisplacement,mean,DTau,exforce[12].FS.frequency,size);
+                    }
+                }
+                if((i%plotinterval) == 0)
+                {
+                    if(prob4)
+                    {
+                        if(exforce[12].type == 1)
+                        {
+                            if(i)
+                            output << CurDisplacement[4] << " , " << CurDisplacement[5] << " , "
+                                << velocity[4] << " , " << velocity[5] << " , "
+                                << acceleration[4] << " , " << acceleration[5]
+                                << " , " << (i*DTau) << endl;
+                        }
+                        else
+                        {
+                            for(int p = 0;p<NCNT;p++)
+                            {
+                                for(int d = 0; d<DoF;d++)
+                                {
+                                    output << CurDisplacement[p*DoF+d] << " , " ;
+                                }
+                                for(int d = 0; d<DoF;d++)
+                                {
+                                    output << velocity[p*DoF+d] << " , ";
+                                }
+                                for(int d = 0; d<DoF;d++)
+                                {
+                                    output << acceleration[p*DoF+d] << " , ";
+                                }
+                                output <<  (i*DTau) << endl;
+                            }
+                        }
+                    }
+                    else if (prob3)
+                    {
+                        output << CurDisplacement[1] << " , "<< CurDisplacement[2]
+                        << " , " << CurDisplacement[4] << " , " << (i*DTau) << endl;
+                    }
+                }*/
+                if(i*DTau >= 25)
                 {
                     for(int k = 0;k<size;k++)
                     {
@@ -543,12 +606,15 @@ int main()
                 for(int d=0;d<DoF;d++)
                 {
                     amplitude[i*DoF+d] = abs(peak[i*DoF+d]-mean[i*DoF+d]);
-                    output<<  amplitude[i*DoF+d] << " , " << mean[i*DoF+d] << " , " << peak[i*DoF+d] << " , ";
+                    output<<  amplitude[i*DoF+d] << " , ";
                     mean[i*DoF+d] = 0;
-                    peak[i*DoF+d] = 0;
+                    peak[i*DoF+d] = -1e20;
+                    CurDisplacement[i*DoF+d] = 0;
+                    LastDisplacement[i*DoF+d] = 0;
+                    NextDisplacement[i*DoF+d] = 0;
                 }
             }
-            output << exforce[12].FS.frequency << endl << endl;
+            output << exforce[12].FS.frequency << endl;
         }
     }
 
