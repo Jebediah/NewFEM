@@ -117,7 +117,7 @@ int main()
     int *nodesfixed;
     Node*nodes = NULL;
     Force*exforce = NULL;
-    bool prob3 = false, prob4 = false, freaksweep = false;
+    bool prob3 = false, prob4 = false, freaksweep = false, grav = false;
     int size;
     ofstream output ("Output.txt");
 
@@ -127,9 +127,11 @@ int main()
     cin >> DTau;
     cout << "Enter last time to solve for." << endl;
     cin >> TFinal;
+    cout << "Enter 1 for gravity, 0 for no gravity"
+        << endl << "(Gravity is assumed to act in the negative y direction)" << endl;
+    cin >> grav;
 
     cout<<"Enter 4 to automatically set up the system in problem 4"<<endl;
-    //cout<<"Enter 3 to automatically set up the system in problem 3"<<endl;
     cin >> scratch;
 
     if(scratch == 4)
@@ -177,37 +179,11 @@ int main()
         nodesfixed[3] = 9;
         scratch = 4;
     }
-    /*
-    else if(scratch == 3)
-    {
-        prob3 = true;
-        NCNT = 6;
-        DoF = 1;
-        size = 6;
-        nodes = new Node[NCNT];
-        for (int i=0;i<NCNT;i++)
-        {
-            nodes[i].initProb3(i);
-        }
-        exforce = new Force[size];
-        for(int i=0;i<size;i++)
-        {
-            exforce[i].type = 0;
-            exforce[i].curval = nodes[i].getselffactor(2)*(-9.81);
-        }
-        numFixed = 3;
-        nodesfixed = new int[numFixed];
-        nodesfixed[0] = 0;
-        nodesfixed[1] = 3;
-        nodesfixed[2] = 5;
-    }
-    */
     else
     {
         cout << "enter # of nodes:          ";
         cin >> NCNT;
-        //cout << "Choose 1 or 2 degrees of freedom: ";
-        /*cin >>*/ DoF = 2;
+        DoF = 2;
         nodes = new Node[NCNT];
         for (int i=0;i<NCNT;i++)
         {
@@ -289,7 +265,10 @@ int main()
         amplitude[i] = 0;
         mean[i] = 0;
         peak[i] = -1e20;
-        //exforce[i].curval = 0;
+        if(grav && ((i&1) == 1))
+        {
+            exforce[i].curval -= 9.80665*nodes[(i/DoF)].getselffactor(2); //exploiting integer division here
+        }
     }
 
     //first the selfreferential elements
@@ -341,21 +320,32 @@ int main()
                 {
                     if(exforce[j].type == 1) //sinusoid
                     {
-                        exforce[j].curval = (exforce[j].FS.amplitude)*sin((exforce[j].FS.frequency)*((i)*DTau));
+                        if(j&1)
+                        {
+                            exforce[j].curval = (exforce[j].FS.amplitude)*sin((exforce[j].FS.frequency)*((i)*DTau)) - grav*(9.80665*nodes[(j/DoF)].getselffactor(2));
+                        }
+                        else
+                        {
+                            exforce[j].curval = (exforce[j].FS.amplitude)*sin((exforce[j].FS.frequency)*((i)*DTau));
+                        }
                     }
                     else //ramp
                     {
-                        exforce[j].curval = (exforce[j].multiplier)*((i)*DTau);
+                        if(j&1)
+                        {
+                            exforce[j].curval = (exforce[j].multiplier)*((i)*DTau) - grav*(9.80665*nodes[(j/DoF)].getselffactor(2));
+                        }
+                        else
+                        {
+                            exforce[j].curval = (exforce[j].multiplier)*((i)*DTau);
+                        }
                     }
                 }
             }
             GAssemble(size,Mc,Cc,Kc,G,exforce);
             AAssemble(size,Mc,Cc,A);
-            //MPrint(A,size,size);
             createsubmatrix(A, submatrix,size,nodesfixed);
-            //MPrint(submatrix,size-(DoF*numFixed),size);
             createsubG(G,subG,size,nodesfixed);
-
             lud(submatrix,subG,(size-(DoF*numFixed)),subnextdis);
 
             //put next displacements into main vector
@@ -425,8 +415,8 @@ int main()
                             {
                                 output << acceleration[p*DoF+d] << " , ";
                             }
-                            output <<  (i*DTau) << endl;
                         }
+                        output <<  (i*DTau) << endl;
                     }
                 }
                 else if (prob3)
@@ -484,23 +474,33 @@ int main()
                     {
                         if(exforce[j].type == 1) //sinusoid
                         {
-                            exforce[j].curval = (exforce[j].FS.amplitude)*sin((exforce[j].FS.frequency)*((i)*DTau));
+                            if(j&1)
+                            {
+                                exforce[j].curval = (exforce[j].FS.amplitude)*sin((exforce[j].FS.frequency)*((i)*DTau)) - grav*(9.80665*nodes[(j/DoF)].getselffactor(2));
+                            }
+                            else
+                            {
+                                exforce[j].curval = (exforce[j].FS.amplitude)*sin((exforce[j].FS.frequency)*((i)*DTau));
+                            }
                         }
                         else //ramp
                         {
-                            exforce[j].curval = (exforce[j].multiplier)*((i)*DTau);
+                            if(j&1)
+                            {
+                                exforce[j].curval = (exforce[j].multiplier)*((i)*DTau) - grav*(9.80665*nodes[(j/DoF)].getselffactor(2));
+                            }
+                            else
+                            {
+                                exforce[j].curval = (exforce[j].multiplier)*((i)*DTau);
+                            }
                         }
                     }
                 }
                 GAssemble(size,Mc,Cc,Kc,G,exforce);
                 AAssemble(size,Mc,Cc,A);
-                //MPrint(A,size,size);
                 createsubmatrix(A, submatrix,size,nodesfixed);
-                //MPrint(submatrix,size-(DoF*numFixed),size);
                 createsubG(G,subG,size,nodesfixed);
-
                 lud(submatrix,subG,(size-(DoF*numFixed)),subnextdis);
-
                 //put next displacements into main vector
                 fixindx = 0;
                 lj = 0;
@@ -525,59 +525,6 @@ int main()
                     velocity[j] = (NextDisplacement[j]-LastDisplacement[j])/TwiceDTau;
                     acceleration[j] = ((NextDisplacement[j]-2*CurDisplacement[j]+LastDisplacement[j])/DTauSqd);
                 }
-                //check for peak and sum for mean if needed
-                /*if(prob4)
-                {
-                    if((exforce[12].type == 1) && (i*DTau >= T1))
-                    {
-                        for(int k = 0;k<size;k++)
-                        {
-                            if(peak[k] < CurDisplacement[k])
-                            {
-                                peak[k] = CurDisplacement[k];
-                            }
-                        }
-                        freqsweep(CurDisplacement,LastDisplacement,mean,DTau,exforce[12].FS.frequency,size);
-                    }
-                }
-                if((i%plotinterval) == 0)
-                {
-                    if(prob4)
-                    {
-                        if(exforce[12].type == 1)
-                        {
-                            if(i)
-                            output << CurDisplacement[4] << " , " << CurDisplacement[5] << " , "
-                                << velocity[4] << " , " << velocity[5] << " , "
-                                << acceleration[4] << " , " << acceleration[5]
-                                << " , " << (i*DTau) << endl;
-                        }
-                        else
-                        {
-                            for(int p = 0;p<NCNT;p++)
-                            {
-                                for(int d = 0; d<DoF;d++)
-                                {
-                                    output << CurDisplacement[p*DoF+d] << " , " ;
-                                }
-                                for(int d = 0; d<DoF;d++)
-                                {
-                                    output << velocity[p*DoF+d] << " , ";
-                                }
-                                for(int d = 0; d<DoF;d++)
-                                {
-                                    output << acceleration[p*DoF+d] << " , ";
-                                }
-                                output <<  (i*DTau) << endl;
-                            }
-                        }
-                    }
-                    else if (prob3)
-                    {
-                        output << CurDisplacement[1] << " , "<< CurDisplacement[2]
-                        << " , " << CurDisplacement[4] << " , " << (i*DTau) << endl;
-                    }
-                }*/
                 if(i*DTau >= 25)
                 {
                     for(int k = 0;k<size;k++)
